@@ -44,8 +44,18 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       },
     });
 
+    const assignmentFn = new lambda.Function(this, "AssignmentFunction", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: "assignments.handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "../src/dist")),
+      environment: {
+        TABLE_NAME: table.tableName,
+      },
+    });
+
     table.grantReadWriteData(employeeFn);
     table.grantReadWriteData(projectFn);
+    table.grantReadWriteData(assignmentFn);
 
     const api = new apigwv2.HttpApi(this, "HttpApi", {
       apiName: "MiniProjAPI",
@@ -59,6 +69,11 @@ export class MiniServerlessBackendStack extends cdk.Stack {
     const projectIntegration = new HttpLambdaIntegration(
       "ProjectIntegraton",
       projectFn
+    );
+
+    const assignmentIntegration = new HttpLambdaIntegration(
+      "AssignmentIntegration",
+      assignmentFn
     );
 
     api.addRoutes({
@@ -83,6 +98,24 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       path: "/projects/{id}",
       methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
       integration: projectIntegration,
+    });
+
+    api.addRoutes({
+      path: "/assignments",
+      methods: [HttpMethod.POST, HttpMethod.DELETE],
+      integration: assignmentIntegration,
+    });
+
+    api.addRoutes({
+      path: "/employees/{id}/projects",
+      methods: [HttpMethod.GET],
+      integration: assignmentIntegration,
+    });
+
+    api.addRoutes({
+      path: "/projects/{id}/employees",
+      methods: [HttpMethod.GET],
+      integration: assignmentIntegration,
     });
 
     new cdk.CfnOutput(this, "ApiUrl", {
