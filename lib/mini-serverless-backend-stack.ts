@@ -1,4 +1,4 @@
-import { Stack, StackProps, RemovalPolicy, CfnOutput } from "aws-cdk-lib";
+import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -7,48 +7,87 @@ import { HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import path from "path";
 
-export class MiniServerlessBackendStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+export class MiniServerlessBackendStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const table = new dynamodb.Table(this, "AppDataTable", {
-      tableName: "todoTable",
+    const table = new dynamodb.Table(this, "AppTable", {
+      tableName: "EmployeeProjectTable",
       partitionKey: { name: "PK", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "SK", type: dynamodb.AttributeType.STRING },
-      removalPolicy: RemovalPolicy.DESTROY,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const fn = new lambda.Function(this, "CrudLambda", {
+    table.addGlobalSecondaryIndex({
+      indexName: "GSI1",
+      partitionKey: { name: "GSI1PK", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "GSI1SK", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const employeeFn = new lambda.Function(this, "EmployeeFunction", {
       runtime: lambda.Runtime.NODEJS_18_X,
+      handler: "employees.handler",
       code: lambda.Code.fromAsset(path.join(__dirname, "../src/dist")),
-      handler: "index.handler",
-      functionName: "todo-function",
+      environment: {
+        TABLE_NAME: table.tableName,
+      },
     });
 
-    table.grantReadWriteData(fn);
-
-    const httpApi = new apigwv2.HttpApi(this, "CrudHttpApi", {
-      apiName: "todo-api",
+    const projectFn = new lambda.Function(this, "ProjectFunction", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: "projects.handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "../src/dist")),
+      environment: {
+        TABLE_NAME: table.tableName,
+      },
     });
 
-    const lambdaIntegration = new HttpLambdaIntegration("CrudIntegration", fn);
+    table.grantReadWriteData(employeeFn);
+    table.grantReadWriteData(projectFn);
 
-    httpApi.addRoutes({
-      path: "/items",
+    const api = new apigwv2.HttpApi(this, "HttpApi", {
+      apiName: "MiniProjAPI",
+    });
+
+    const employeeIntegration = new HttpLambdaIntegration(
+      "EmployeeIntegration",
+      employeeFn
+    );
+
+    const projectIntegration = new HttpLambdaIntegration(
+      "ProjectIntegraton",
+      projectFn
+    );
+
+    api.addRoutes({
+      path: "/employees",
       methods: [HttpMethod.GET, HttpMethod.POST],
-      integration: lambdaIntegration,
+      integration: employeeIntegration,
     });
 
-    httpApi.addRoutes({
-      path: "/items/{id}",
-      methods: [HttpMethod.GET, HttpMethod.DELETE, HttpMethod.PATCH],
-      integration: lambdaIntegration,
+    api.addRoutes({
+      path: "/employees/{id}",
+      methods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.DELETE],
+      integration: employeeIntegration,
     });
 
-    new CfnOutput(this, "ApiUrl", {
-      exportName: "APIGatewayEndpoint",
-      value: httpApi.apiEndpoint,
-      description: "The endpoint url of the API Gateway",
+    api.addRoutes({
+      path: "/projects",
+      methods: [HttpMethod.GET, HttpMethod.POST],
+      integration: projectIntegration,
+    });
+
+    api.addRoutes({
+      path: "/projects/{id}",
+      methods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.DELETE],
+      integration: projectIntegration,
+    });
+
+    new cdk.CfnOutput(this, "ApiUrl", {
+      value: api.apiEndpoint,
+      description: "The base URL of the HTTP API",
     });
   }
 }
