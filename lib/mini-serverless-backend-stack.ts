@@ -69,7 +69,7 @@ export class MiniServerlessBackendStack extends cdk.Stack {
 
     api.addRoutes({
       path: "/employees/{id}",
-      methods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.DELETE],
+      methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
       integration: employeeIntegration,
     });
 
@@ -81,7 +81,7 @@ export class MiniServerlessBackendStack extends cdk.Stack {
 
     api.addRoutes({
       path: "/projects/{id}",
-      methods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.DELETE],
+      methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
       integration: projectIntegration,
     });
 
