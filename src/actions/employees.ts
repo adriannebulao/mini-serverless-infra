@@ -38,7 +38,7 @@ const routeHandlers: Record<string, RouteHandler> = {
         TableName: tableName,
         Key: {
           PK: `EMP#${id}`,
-          SK: `PROFILE`,
+          SK: "PROFILE",
         },
       })
     );
@@ -172,7 +172,7 @@ const routeHandlers: Record<string, RouteHandler> = {
         TableName: tableName,
         Key: {
           PK: `EMP#${id}`,
-          SK: `PROFILE`,
+          SK: "PROFILE",
         },
       })
     );
