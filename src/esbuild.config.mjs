@@ -7,6 +7,7 @@ build({
   entryPoints: [
     "./actions/employees.ts",
     "./actions/projects.ts",
+    "./actions/assignments.ts",
     // add more as needed
   ],
   entryNames: "[dir]/[name]/index",
