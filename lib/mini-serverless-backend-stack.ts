@@ -6,6 +6,8 @@ import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import path from "path";
+import { config } from "dotenv";
+config();
 
 export class MiniServerlessBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -59,6 +61,16 @@ export class MiniServerlessBackendStack extends cdk.Stack {
 
     const api = new apigwv2.HttpApi(this, "HttpApi", {
       apiName: "MiniProjAPI",
+      corsPreflight: {
+        allowHeaders: ["Content-Type"],
+        allowMethods: [
+          apigwv2.CorsHttpMethod.GET,
+          apigwv2.CorsHttpMethod.POST,
+          apigwv2.CorsHttpMethod.PUT,
+          apigwv2.CorsHttpMethod.DELETE,
+        ],
+        allowOrigins: ["http://localhost:3000"],
+      },
     });
 
     const employeeIntegration = new HttpLambdaIntegration(
