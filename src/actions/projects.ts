@@ -22,13 +22,18 @@ const routeHandlers: Record<string, RouteHandler> = {
     const scanResult = await client.send(
       new ScanCommand({
         TableName: tableName,
-        FilterExpression: "begins_with(PK, :pk)",
         ExpressionAttributeValues: { ":pk": "PROJ#" },
+        FilterExpression: "begins_with(PK, :pk)",
       })
     );
+
+    const details = (scanResult.Items ?? []).filter(
+      (item) => item.SK === "DETAILS"
+    );
+
     return {
       statusCode: 200,
-      body: JSON.stringify(scanResult.Items ?? []),
+      body: JSON.stringify(details),
     };
   },
 
