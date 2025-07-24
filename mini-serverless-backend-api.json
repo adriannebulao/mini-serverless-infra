@@ -1,0 +1,210 @@
+{
+  "info": {
+    "name": "mini-proj",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Assignments",
+      "item": [
+        {
+          "name": "Assign employee to project",
+          "event": [],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/assignments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": \"e86db96b-9764-4f14-b768-b682fb0bbeb3\",\n  \"projectId\": \"e496ba5f-3fb8-4de2-8afd-18488d8e8b3c\",\n  \"role\": \"Developer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete assignment",
+          "event": [],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/assignments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": \"3df10df5-fd1d-4142-ab76-5194bf4ccb67\",\n  \"projectId\": \"e496ba5f-3fb8-4de2-8afd-18488d8e8b3c\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Retrieve employees assigned to project",
+          "event": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/e496ba5f-3fb8-4de2-8afd-18488d8e8b3c/employees"
+          }
+        },
+        {
+          "name": "Retrieve projects assigned to employee",
+          "event": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/e86db96b-9764-4f14-b768-b682fb0bbeb3/projects"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "Create employee",
+          "event": [],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/employees",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"jane@example.com\",\n  \"start_date\": \"2023-01-01\",\n  \"positions\": [\"Software Developer\", \"DevOps Engineer\"],\n  \"tech_stack\": [\"Node.JS\", \"TypeScript\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete employee",
+          "event": [],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/employees/807398c7-51fe-49b9-af79-28aa90fcfb9e"
+          }
+        },
+        {
+          "name": "List employees",
+          "event": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/employees"
+          }
+        },
+        {
+          "name": "Retrieve employee",
+          "event": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/e86db96b-9764-4f14-b768-b682fb0bbeb3"
+          }
+        },
+        {
+          "name": "Update employee",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{base_url}}/807398c7-51fe-49b9-af79-28aa90fcfb9e",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"jane@example.com\",\n  \"start_date\": \"2023-01-01\",\n  \"end_date\": null,\n  \"positions\": [\n    \"Software Developer\",\n    \"DevOps Engineer\"\n  ],\n  \"tech_stack\": [\n    \"Node.JS\",\n    \"TypeScript\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Create project",
+          "event": [],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/projects",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Unicorn Project\",\n  \"start_date\": \"2025-01-01\",\n  \"end_date\": \"2025-06-01\",\n  \"tech_stack\": [\n    \"Spring Boot\",\n    \"Angular.JS\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete project",
+          "event": [],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/projects/973059e0-89e0-434d-a56d-a5244a2f6e3f"
+          }
+        },
+        {
+          "name": "List projects",
+          "event": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects"
+          }
+        },
+        {
+          "name": "Retrieve project",
+          "event": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/973059e0-89e0-434d-a56d-a5244a2f6e3f"
+          }
+        },
+        {
+          "name": "Update project",
+          "event": [],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{base_url}}/projects/973059e0-89e0-434d-a56d-a5244a2f6e3f",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Phoenix Project\",\n  \"description\": null,\n  \"start_date\": \"2025-01-01\",\n  \"end_date\": \"2025-06-01\",\n  \"tech_stack\": [\n    \"Spring Boot\",\n    \"React\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "",
+      "type": "default"
+    }
+  ]
+}
