@@ -9,6 +9,8 @@ import {
   PutCommand,
   DeleteCommand,
   UpdateCommand,
+  QueryCommand,
+  BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
 config();
@@ -169,6 +171,38 @@ const routeHandlers: Record<string, RouteHandler> = {
   },
 
   "DELETE /projects/:id": async (_event, id) => {
+    // Step 1: Query assignments via GSI1
+    const assignments = await client.send(
+      new QueryCommand({
+        TableName: tableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk AND begins_with(GSI1SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": `PROJ#${id}`,
+          ":sk": "EMP#",
+        },
+      })
+    );
+
+    // Step 2: Batch delete
+    const deletes =
+      assignments.Items?.map((item) => ({
+        DeleteRequest: {
+          Key: { PK: item.PK, SK: item.SK },
+        },
+      })) || [];
+
+    if (deletes.length > 0) {
+      await client.send(
+        new BatchWriteCommand({
+          RequestItems: {
+            [tableName!]: deletes,
+          },
+        })
+      );
+    }
+
+    // Step 3: Delete project details
     await client.send(
       new DeleteCommand({
         TableName: tableName,
@@ -178,7 +212,13 @@ const routeHandlers: Record<string, RouteHandler> = {
         },
       })
     );
-    return { statusCode: 200, message: "Deleted project" };
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: "Deleted project and related assignments",
+      }),
+    };
   },
 };
 

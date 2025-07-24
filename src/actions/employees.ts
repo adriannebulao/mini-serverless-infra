@@ -9,6 +9,8 @@ import {
   PutCommand,
   DeleteCommand,
   UpdateCommand,
+  QueryCommand,
+  BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
 config();
@@ -172,6 +174,34 @@ const routeHandlers: Record<string, RouteHandler> = {
   },
 
   "DELETE /employees/:id": async (_event, id) => {
+    const assignments = await client.send(
+      new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": `EMP#${id}`,
+          ":sk": "PROJ#",
+        },
+      })
+    );
+
+    const deletes =
+      assignments.Items?.map((item) => ({
+        DeleteRequest: {
+          Key: { PK: item.PK, SK: item.SK },
+        },
+      })) || [];
+
+    if (deletes.length > 0) {
+      await client.send(
+        new BatchWriteCommand({
+          RequestItems: {
+            [tableName!]: deletes,
+          },
+        })
+      );
+    }
+
     await client.send(
       new DeleteCommand({
         TableName: tableName,
@@ -181,7 +211,13 @@ const routeHandlers: Record<string, RouteHandler> = {
         },
       })
     );
-    return { statusCode: 200, message: "Deleted employee" };
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: "Deleted employee and related assignments",
+      }),
+    };
   },
 };
 
