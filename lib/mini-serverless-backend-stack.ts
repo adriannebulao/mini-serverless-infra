@@ -105,7 +105,7 @@ export class MiniServerlessBackendStack extends cdk.Stack {
 
     const projects = api.root.addResource("projects");
     projects.addMethod("GET", projectIntegration);
-    projects.addMethod("POST", employeeIntegration);
+    projects.addMethod("POST", projectIntegration);
 
     const projectById = projects.addResource("{id}");
     projectById.addMethod("GET", projectIntegration);
