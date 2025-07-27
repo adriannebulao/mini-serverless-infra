@@ -5,7 +5,6 @@ import { v4 as uuidv4 } from "uuid";
 import {
   DynamoDBDocumentClient,
   GetCommand,
-  ScanCommand,
   PutCommand,
   DeleteCommand,
   UpdateCommand,
@@ -22,19 +21,18 @@ const tableName = process.env.TABLE_NAME;
 
 const routeHandlers: Record<string, RouteHandler> = {
   "GET /employees": async () => {
-    const scanResult = await client.send(
-      new ScanCommand({
+    const result = await client.send(
+      new QueryCommand({
         TableName: tableName,
-        ExpressionAttributeValues: { ":pk": "EMP#" },
-        FilterExpression: "begins_with(PK, :pk)",
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :gsiPk",
+        ExpressionAttributeValues: {
+          ":gsiPk": "EMPLOYEE",
+        },
       })
     );
 
-    const profiles = (scanResult.Items ?? []).filter(
-      (item) => item.SK === "PROFILE"
-    );
-
-    return createResponse(200, profiles);
+    return createResponse(200, result.Items ?? []);
   },
 
   "GET /employees/:id": async (_event, id) => {
@@ -90,6 +88,8 @@ const routeHandlers: Record<string, RouteHandler> = {
       tech_stack: body.tech_stack || [],
       created_at: timestamp,
       updated_at: timestamp,
+      GSI1PK: "EMPLOYEE",
+      GSI1SK: body.name,
     };
 
     await client.send(
@@ -142,7 +142,8 @@ const routeHandlers: Record<string, RouteHandler> = {
             end_date = :end_date,
             positions = :positions,
             tech_stack = :tech_stack,
-            updated_at = :updated_at
+            updated_at = :updated_at,
+            GSI1SK = :gsi1sk
       `,
         ExpressionAttributeNames: {
           "#name": "name",
@@ -155,6 +156,7 @@ const routeHandlers: Record<string, RouteHandler> = {
           ":positions": body.positions,
           ":tech_stack": body.tech_stack,
           ":updated_at": timestamp,
+          ":gsi1sk": body.name,
         },
       })
     );
