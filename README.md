@@ -2,12 +2,22 @@
 
 This project is a serverless backend built with AWS CDK, Lambda, API Gateway, and DynamoDB using a single-table design. It manages employees, projects, and their assignments with full CRUD operations and efficient data modeling patterns.
 
+## Architecture Overview
+
+This project consists of two independently deployable stacks:
+
+- **Backend Stack** (`MiniServerlessBackendStack`)  
+  Handles all business logic using AWS Lambda, API Gateway, and DynamoDB with a single-table design
+
+- **Frontend Stack** (`MiniReactFrontendStack`)  
+  Deploys a static React frontend to an S3 bucket configured for static website hosting
+
 ## Tech Stack
 
 - **AWS CDK (Cloud Development Kit)** - Infrastructure as Code using TypeScript to define AWS resources like DynamoDB tables, Lambda functions, and API Gateway routes
 - **AWS Lambda** - Serverless compute service to handle business logic for employee, project, and assignment operations
 - **AWS API Gateway** - Provides RESTful HTTP endpoints that trigger Lambda functions
-- **AWS DynamoDB** - NoSQL database using a single-table design to effectively store employees, projects, assignments, in a scalable way
+- **AWS DynamoDB** - NoSQL database using a single-table design to effectively store employees, projects, assignments in a scalable way
 
 ## Getting Started
 
@@ -35,7 +45,7 @@ cd mini-serverless-backend
 
 2. Install dependencies
 
-Install both root-level and `src` dependencies:
+Install both root-level (`/`) and lambda-level (`/src`) dependencies:
 
 ```
 npm install
@@ -63,7 +73,7 @@ aws sts get-caller-identity --query "Account" --output text
 aws configure get region
 ```
 
-_For more information on how to configure your AWS CLI:_ https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html
+> _For more information on how to configure your AWS CLI:_ https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html
 
 4. Bootstrap CDK (only once per environment)
 
@@ -71,10 +81,18 @@ _For more information on how to configure your AWS CLI:_ https://docs.aws.amazon
 cdk bootstrap
 ```
 
-5. Deploy the stack
+5. Deploy frontend to AWS S3
 
 ```
-npm run deploy
+npm run deploy:frontend
+```
+
+Copy the frontend URL output from the CDK CLI and set it as the `FRONTEND_URL` value in your `.env` file
+
+6. Deploy the backend stack
+
+```
+npm run deploy:backend
 ```
 
 This will:
@@ -84,30 +102,32 @@ This will:
 - Set up API Gateway routes
 - Output the API endpoint URL (use this for API testing or store in frontend `.env`)
 
-6. Destroy the stack
+7. Destroy the stacks
 
 ```
-npx cdk destroy
+npx cdk destroy --all
 ```
 
 ## API Documentation
 
 - You can import the [Postman collection](mini-serverless-backend-api.json)
 
-## Development Notes
+## Development & Deployment Notes
 
 - The `cdk.json` file tells the CDK Toolkit how to execute your app.
-- Utilize **AWS CloudWatch** for debugging
+- Utilize **AWS CloudWatch Logs Live Tail** for debugging
 
-- Custom commands for this project:
+### Custom Project Commands
 
-  - `npm run synth` npm run build + npx cdk synth
-  - `npm run deploy` npm run build + npx cdk deploy
-
-- Useful commands:
-  - `npm run build` compile typescript to js
-  - `npm run watch` watch for changes and compile
-  - `npm run test` perform the jest unit tests
-  - `npx cdk deploy` deploy this stack to your default AWS account/region
-  - `npx cdk diff` compare deployed stack with current state
-  - `npx cdk synth` emits the synthesized CloudFormation template
+| Command                    | Description                            |
+| -------------------------- | -------------------------------------- |
+| `npm run deploy:frontend`  | Deploy React frontend to S3            |
+| `npm run deploy:backend`   | Deploy backend stack (Lambda, API, DB) |
+| `npm run deploy:all`       | Deploy both frontend and backend       |
+| `npm run destroy`          | Destroy all deployed stacks            |
+| `npm run destroy:frontend` | Destroy only the frontend stack        |
+| `npm run destroy:backend`  | Destroy only the backend stack         |
+| `npm run synth:backend`    | Synth backend stack to CloudFormation  |
+| `npm run build`            | Compile TypeScript + bundle Lambdas    |
+| `npm run watch`            | Recompile on file changes              |
+| `npm run test`             | Run Jest tests                         |

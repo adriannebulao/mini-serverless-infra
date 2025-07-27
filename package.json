@@ -13,8 +13,15 @@
     "test": "jest",
     "cdk": "cdk",
     "esbuild": "npm run esbuild -w lambdas",
-    "deploy": "npm run build && cdk deploy",
-    "synth": "npm run build && cdk synth"
+    "deploy:frontend": "cdk deploy MiniReactFrontendStack",
+    "deploy:backend": "npm run build && cdk deploy MiniServerlessBackendStack",
+    "deploy:all": "npm run deploy:frontend && npm run deploy:backend",
+    "synth:frontend": "cdk synth MiniReactFrontendStack",
+    "synth:backend": "npm run build && cdk synth MiniServerlessBackendStack",
+    "synth:all": "npm run synth:frontend && npm run synth:backend",
+    "destroy:frontend": "cdk destroy MiniReactFrontendStack",
+    "destroy:backend": "cdk destroy MiniServerlessBackendStack",
+    "destroy": "cdk destroy --all"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.149",
