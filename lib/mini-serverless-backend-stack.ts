@@ -5,8 +5,6 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import path from "path";
 import { config } from "dotenv";
-import * as s3 from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 config();
 
 export class MiniServerlessBackendStack extends cdk.Stack {
@@ -88,29 +86,6 @@ export class MiniServerlessBackendStack extends cdk.Stack {
         maxAge: cdk.Duration.days(10),
         statusCode: 200,
       },
-    });
-
-    const frontendBucket = new s3.Bucket(this, "FrontendBucket", {
-      websiteIndexDocument: "index.html",
-      websiteErrorDocument: "index.html",
-      publicReadAccess: true,
-      blockPublicAccess: {
-        blockPublicAcls: false,
-        blockPublicPolicy: false,
-        ignorePublicAcls: false,
-        restrictPublicBuckets: false,
-      },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
-    new BucketDeployment(this, "FrontendDeployment", {
-      sources: [Source.asset(frontendBuildPath)],
-      destinationBucket: frontendBucket,
-    });
-
-    new cdk.CfnOutput(this, "FrontendURL", {
-      value: frontendBucket.bucketWebsiteUrl,
     });
 
     const employeeIntegration = new apigateway.LambdaIntegration(employeeFn);
