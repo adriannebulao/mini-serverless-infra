@@ -2,9 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
-import { HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
-import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import path from "path";
 import { config } from "dotenv";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -71,19 +69,14 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       throw new Error("FRONTEND_URL environment variable is not defined.");
     }
 
-    const api = new apigwv2.HttpApi(this, "HttpApi", {
-      apiName: "MiniProjAPI",
-      corsPreflight: {
-        allowHeaders: ["Content-Type", "Authorization"],
-        allowMethods: [
-          apigwv2.CorsHttpMethod.GET,
-          apigwv2.CorsHttpMethod.POST,
-          apigwv2.CorsHttpMethod.PUT,
-          apigwv2.CorsHttpMethod.DELETE,
-          apigwv2.CorsHttpMethod.OPTIONS,
-        ],
+    const api = new apigateway.RestApi(this, "MiniProjRestApi", {
+      restApiName: "MiniProjAPI",
+      defaultCorsPreflightOptions: {
         allowOrigins: [frontendUrl],
+        allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowHeaders: ["Content-Type", "Authorization"],
         maxAge: cdk.Duration.days(10),
+        statusCode: 200,
       },
     });
 
@@ -116,65 +109,42 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       value: frontendBucket.bucketWebsiteUrl,
     });
 
-    const employeeIntegration = new HttpLambdaIntegration(
-      "EmployeeIntegration",
-      employeeFn
-    );
-
-    const projectIntegration = new HttpLambdaIntegration(
-      "ProjectIntegraton",
-      projectFn
-    );
-
-    const assignmentIntegration = new HttpLambdaIntegration(
-      "AssignmentIntegration",
+    const employeeIntegration = new apigateway.LambdaIntegration(employeeFn);
+    const projectIntegration = new apigateway.LambdaIntegration(projectFn);
+    const assignmentIntegration = new apigateway.LambdaIntegration(
       assignmentFn
     );
 
-    api.addRoutes({
-      path: "/employees",
-      methods: [HttpMethod.GET, HttpMethod.POST],
-      integration: employeeIntegration,
-    });
+    const employees = api.root.addResource("employees");
+    employees.addMethod("GET", employeeIntegration);
+    employees.addMethod("POST", employeeIntegration);
 
-    api.addRoutes({
-      path: "/employees/{id}",
-      methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
-      integration: employeeIntegration,
-    });
+    const employeeById = employees.addResource("{id}");
+    employeeById.addMethod("GET", employeeIntegration);
+    employeeById.addMethod("PUT", employeeIntegration);
+    employeeById.addMethod("DELETE", employeeIntegration);
 
-    api.addRoutes({
-      path: "/projects",
-      methods: [HttpMethod.GET, HttpMethod.POST],
-      integration: projectIntegration,
-    });
+    const projects = api.root.addResource("projects");
+    projects.addMethod("GET", projectIntegration);
+    projects.addMethod("POST", employeeIntegration);
 
-    api.addRoutes({
-      path: "/projects/{id}",
-      methods: [HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE],
-      integration: projectIntegration,
-    });
+    const projectById = projects.addResource("{id}");
+    projectById.addMethod("GET", projectIntegration);
+    projectById.addMethod("PUT", projectIntegration);
+    projectById.addMethod("DELETE", projectIntegration);
 
-    api.addRoutes({
-      path: "/assignments",
-      methods: [HttpMethod.POST, HttpMethod.DELETE],
-      integration: assignmentIntegration,
-    });
+    const assignments = api.root.addResource("assignments");
+    assignments.addMethod("POST", assignmentIntegration);
+    assignments.addMethod("DELETE", assignmentIntegration);
 
-    api.addRoutes({
-      path: "/employees/{id}/projects",
-      methods: [HttpMethod.GET],
-      integration: assignmentIntegration,
-    });
+    const employeeProjects = employeeById.addResource("projects");
+    employeeProjects.addMethod("GET", assignmentIntegration);
 
-    api.addRoutes({
-      path: "/projects/{id}/employees",
-      methods: [HttpMethod.GET],
-      integration: assignmentIntegration,
-    });
+    const projectEmployees = projectById.addResource("employees");
+    projectEmployees.addMethod("GET", assignmentIntegration);
 
     new cdk.CfnOutput(this, "ApiUrl", {
-      value: api.apiEndpoint,
+      value: api.url,
       description: "The base URL of the HTTP API",
     });
   }
