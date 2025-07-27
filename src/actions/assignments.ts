@@ -1,4 +1,4 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { APIGatewayProxyHandler } from "aws-lambda";
 import { StatusCodes } from "http-status-codes";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
@@ -9,6 +9,7 @@ import {
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
+import { createResponse } from "../utils/response.js";
 config();
 
 const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -18,21 +19,15 @@ const tableName = process.env.TABLE_NAME;
 const routeHandlers: Record<string, RouteHandler> = {
   "POST /assignments": async (event) => {
     if (!event.body) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "Missing request body" }),
-      };
+      return createResponse(400, { message: "Missing request body" });
     }
 
     const { employeeId, projectId, role } = JSON.parse(event.body);
 
     if (!employeeId || !projectId) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          message: "Missing required fields: employeeId or projectId",
-        }),
-      };
+      return createResponse(400, {
+        message: "Missing required fields: employeeId or projectId",
+      });
     }
 
     const employee = await client.send(
@@ -46,10 +41,9 @@ const routeHandlers: Record<string, RouteHandler> = {
     );
 
     if (!employee.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: `Employee ${employeeId} not found` }),
-      };
+      return createResponse(404, {
+        message: `Employee ${employeeId} not found`,
+      });
     }
 
     const project = await client.send(
@@ -63,10 +57,7 @@ const routeHandlers: Record<string, RouteHandler> = {
     );
 
     if (!project.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: `Project ${projectId} not found` }),
-      };
+      return createResponse(404, { message: `Project ${projectId} not found` });
     }
 
     await client.send(
@@ -83,12 +74,9 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return {
-      statusCode: 201,
-      body: JSON.stringify({
-        message: "Employee assigned to project",
-      }),
-    };
+    return createResponse(201, {
+      message: "Employee assigned to project",
+    });
   },
 
   "GET /employees/:id/projects": async (event, id) => {
@@ -103,10 +91,7 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.Items),
-    };
+    return createResponse(200, result.Items);
   },
 
   "GET /projects/:id/employees": async (event, id) => {
@@ -123,27 +108,20 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(result.Items),
-    };
+    return createResponse(200, result.Items);
   },
 
   "DELETE /assignments": async (event) => {
     if (!event.body) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "Missing request body" }),
-      };
+      return createResponse(400, { message: "Missing request body" });
     }
 
     const { employeeId, projectId } = JSON.parse(event.body);
 
     if (!employeeId || !projectId) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "Missing employeeId or projectId" }),
-      };
+      return createResponse(400, {
+        message: "Missing employeeId or projectId",
+      });
     }
 
     await client.send(
@@ -156,10 +134,7 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Unassigned employee from project" }),
-    };
+    return createResponse(200, { message: "Unassigned employee from project" });
   },
 };
 
@@ -179,26 +154,22 @@ const matchRoute = (method: string, path: string) => {
   return null;
 };
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
-  let statusCode = StatusCodes.OK;
-  let body: string | object = "";
-
+export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    const method = event.requestContext.http.method;
-    const path = event.rawPath;
+    const method = event.httpMethod;
+    const path = event.path;
 
     const matched = matchRoute(method, path);
-    if (!matched) throw new Error(`Unsupported route: ${method} ${path}`);
+    if (!matched) {
+      return createResponse(StatusCodes.NOT_FOUND, {
+        message: `Unsupported route: ${method} ${path}`,
+      });
+    }
 
-    body = await matched.handler(event, matched.id);
+    return await matched.handler(event, matched.id);
   } catch (err) {
-    statusCode = StatusCodes.BAD_REQUEST;
-    body = (err as Error).message;
+    return createResponse(StatusCodes.BAD_REQUEST, {
+      message: (err as Error).message,
+    });
   }
-
-  return {
-    statusCode,
-    headers: { "Content-Type": "application/json" },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  };
 };

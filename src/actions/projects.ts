@@ -1,4 +1,4 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { APIGatewayProxyHandler } from "aws-lambda";
 import { StatusCodes } from "http-status-codes";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { v4 as uuidv4 } from "uuid";
@@ -13,6 +13,7 @@ import {
   BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
+import { createResponse } from "../utils/response.js";
 config();
 
 const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -33,10 +34,7 @@ const routeHandlers: Record<string, RouteHandler> = {
       (item) => item.SK === "DETAILS"
     );
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(details),
-    };
+    return createResponse(200, details);
   },
 
   "GET /projects/:id": async (_event, id) => {
@@ -51,35 +49,23 @@ const routeHandlers: Record<string, RouteHandler> = {
     );
 
     if (!getResult.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: "Project not found" }),
-      };
+      return createResponse(404, { message: "Project not found" });
     }
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(getResult.Item),
-    };
+    return createResponse(200, getResult.Item);
   },
 
   "POST /projects": async (event) => {
     if (!event.body) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "Missing request body" }),
-      };
+      return createResponse(400, { message: "Missing request body" });
     }
 
     const body = event.body ? JSON.parse(event.body) : null;
 
     if (!body.name || !body.start_date) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          message: "Missing required fields: name, start_date",
-        }),
-      };
+      return createResponse(400, {
+        message: "Missing required fields: name, start_date",
+      });
     }
     const timestamp = new Date().toISOString();
     const projId = uuidv4();
@@ -103,21 +89,15 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return {
-      statusCode: 201,
-      body: JSON.stringify({
-        message: "Project created",
-        project: newProj,
-      }),
-    };
+    return createResponse(201, {
+      message: "Project created",
+      project: newProj,
+    });
   },
 
   "PUT /projects/:id": async (event, id) => {
     if (!event.body) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "Missing request body" }),
-      };
+      return createResponse(400, { message: "Missing request body" });
     }
 
     const body = event.body ? JSON.parse(event.body) : null;
@@ -132,10 +112,7 @@ const routeHandlers: Record<string, RouteHandler> = {
     );
 
     if (!existing.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: "Project not found" }),
-      };
+      return createResponse(404, { message: "Project not found" });
     }
 
     await client.send(
@@ -164,14 +141,10 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Updated project" }),
-    };
+    return createResponse(200, { message: "Updated project" });
   },
 
   "DELETE /projects/:id": async (_event, id) => {
-    // Step 1: Query assignments via GSI1
     const assignments = await client.send(
       new QueryCommand({
         TableName: tableName,
@@ -184,7 +157,6 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    // Step 2: Batch delete
     const deletes =
       assignments.Items?.map((item) => ({
         DeleteRequest: {
@@ -202,7 +174,6 @@ const routeHandlers: Record<string, RouteHandler> = {
       );
     }
 
-    // Step 3: Delete project details
     await client.send(
       new DeleteCommand({
         TableName: tableName,
@@ -213,12 +184,9 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: "Deleted project and related assignments",
-      }),
-    };
+    return createResponse(200, {
+      message: "Deleted project and related assignments",
+    });
   },
 };
 
@@ -238,26 +206,22 @@ const matchRoute = (method: string, path: string) => {
   return null;
 };
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
-  let statusCode = StatusCodes.OK;
-  let body: string | object = "";
-
+export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    const method = event.requestContext.http.method;
-    const path = event.rawPath;
+    const method = event.httpMethod;
+    const path = event.path;
 
     const matched = matchRoute(method, path);
-    if (!matched) throw new Error(`Unsupported route: ${method} ${path}`);
+    if (!matched) {
+      return createResponse(StatusCodes.NOT_FOUND, {
+        message: `Unsupported route: ${method} ${path}`,
+      });
+    }
 
-    body = await matched.handler(event, matched.id);
+    return await matched.handler(event, matched.id);
   } catch (err) {
-    statusCode = StatusCodes.BAD_REQUEST;
-    body = (err as Error).message;
+    return createResponse(StatusCodes.BAD_REQUEST, {
+      message: (err as Error).message,
+    });
   }
-
-  return {
-    statusCode,
-    headers: { "Content-Type": "application/json" },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  };
 };

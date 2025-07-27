@@ -18,6 +18,18 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       throw new Error("TABLE_NAME environment variable is not defined.");
     }
 
+    const frontendUrl = process.env.FRONTEND_URL;
+    if (!frontendUrl) {
+      throw new Error("FRONTEND_URL environment variable is not defined.");
+    }
+
+    const frontendBuildPath = process.env.FRONTEND_BUILD_PATH;
+    if (!frontendBuildPath) {
+      throw new Error(
+        "FRONTEND_BUILD_PATH environment variable is not defined."
+      );
+    }
+
     const table = new dynamodb.Table(this, "AppTable", {
       tableName: tableName,
       partitionKey: { name: "PK", type: dynamodb.AttributeType.STRING },
@@ -39,6 +51,7 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, "../src/dist")),
       environment: {
         TABLE_NAME: table.tableName,
+        FRONTEND_URL: frontendUrl,
       },
     });
 
@@ -48,6 +61,7 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, "../src/dist")),
       environment: {
         TABLE_NAME: table.tableName,
+        FRONTEND_URL: frontendUrl,
       },
     });
 
@@ -57,17 +71,13 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, "../src/dist")),
       environment: {
         TABLE_NAME: table.tableName,
+        FRONTEND_URL: frontendUrl,
       },
     });
 
     table.grantReadWriteData(employeeFn);
     table.grantReadWriteData(projectFn);
     table.grantReadWriteData(assignmentFn);
-
-    const frontendUrl = process.env.FRONTEND_URL;
-    if (!frontendUrl) {
-      throw new Error("FRONTEND_URL environment variable is not defined.");
-    }
 
     const api = new apigateway.RestApi(this, "MiniProjRestApi", {
       restApiName: "MiniProjAPI",
@@ -94,12 +104,6 @@ export class MiniServerlessBackendStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
-    const frontendBuildPath = process.env.FRONTEND_BUILD_PATH;
-    if (!frontendBuildPath) {
-      throw new Error(
-        "FRONTEND_BUILD_PATH environment variable is not defined."
-      );
-    }
     new BucketDeployment(this, "FrontendDeployment", {
       sources: [Source.asset(frontendBuildPath)],
       destinationBucket: frontendBucket,
