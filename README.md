@@ -1,16 +1,16 @@
-# Mini Serverless Backend
+# Mini Serverless Infra
 
-This project is a serverless backend built with AWS CDK, Lambda, API Gateway, and DynamoDB using a single-table design. It manages employees, projects, and their assignments with full CRUD operations and efficient data modeling patterns.
+This project defines the serverless infrastructure using AWS CDK. It provisions AWS Lambda, API Gateway, DynamoDB (single-table), and S3 to support a full-stack employee-project management app.
 
 ## Architecture Overview
 
-This project consists of two independently deployable stacks:
+This project includes two deployable stacks:
 
 - **Backend Stack** (`MiniServerlessBackendStack`)  
-  Handles all business logic using AWS Lambda, API Gateway, and DynamoDB with a single-table design
+  Deploys Lambda functions, API Gateway routes, and a DynamoDB table
 
 - **Frontend Stack** (`MiniReactFrontendStack`)  
-  Deploys a static React frontend to an S3 bucket configured for static website hosting
+  Deploys a static React frontend to an S3 bucket for website hosting
 
 ## Tech Stack
 

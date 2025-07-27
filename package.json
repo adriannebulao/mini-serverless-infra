@@ -1,8 +1,8 @@
 {
-  "name": "mini-serverless-backend",
+  "name": "mini-serverless-infra",
   "version": "0.1.0",
   "bin": {
-    "mini-serverless-backend": "bin/mini-serverless-backend.js"
+    "mini-serverless-infra": "bin/mini-serverless-infra.js"
   },
   "workspaces": [
     "src"
