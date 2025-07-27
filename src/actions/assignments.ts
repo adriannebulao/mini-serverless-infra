@@ -7,6 +7,7 @@ import {
   PutCommand,
   DeleteCommand,
   QueryCommand,
+  BatchGetCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
 import { createResponse } from "../utils/response.js";
@@ -79,7 +80,7 @@ const routeHandlers: Record<string, RouteHandler> = {
     });
   },
 
-  "GET /employees/:id/projects": async (event, id) => {
+  "GET /employees/:id/projects": async (_event, id) => {
     const result = await client.send(
       new QueryCommand({
         TableName: tableName,
@@ -91,10 +92,46 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return createResponse(200, result.Items);
+    if (!result.Items || result.Items.length === 0) {
+      return createResponse(200, []);
+    }
+
+    const projectIds = result.Items.map((item) => item.SK.replace("PROJ#", ""));
+    const projectKeys = projectIds.map((projId) => ({
+      PK: `PROJ#${projId}`,
+      SK: "DETAILS",
+    }));
+
+    const projectsResult = await client.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [tableName!]: {
+            Keys: projectKeys,
+          },
+        },
+      })
+    );
+
+    const projectNames = new Map();
+    if (projectsResult.Responses && projectsResult.Responses[tableName!]) {
+      projectsResult.Responses[tableName!].forEach((project) => {
+        const projId = project.PK.replace("PROJ#", "");
+        projectNames.set(projId, project.name);
+      });
+    }
+
+    const enrichedAssignments = result.Items.map((assignment) => {
+      const projId = assignment.SK.replace("PROJ#", "");
+      return {
+        ...assignment,
+        projectName: projectNames.get(projId) || "Unknown Project",
+      };
+    });
+
+    return createResponse(200, enrichedAssignments);
   },
 
-  "GET /projects/:id/employees": async (event, id) => {
+  "GET /projects/:id/employees": async (_event, id) => {
     const result = await client.send(
       new QueryCommand({
         TableName: tableName,
@@ -108,7 +145,45 @@ const routeHandlers: Record<string, RouteHandler> = {
       })
     );
 
-    return createResponse(200, result.Items);
+    if (!result.Items || result.Items.length === 0) {
+      return createResponse(200, []);
+    }
+
+    const employeeIds = result.Items.map((item) =>
+      item.GSI1SK.replace("EMP#", "")
+    );
+    const employeeKeys = employeeIds.map((empId) => ({
+      PK: `EMP#${empId}`,
+      SK: "PROFILE",
+    }));
+
+    const employeesResult = await client.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [tableName!]: {
+            Keys: employeeKeys,
+          },
+        },
+      })
+    );
+
+    const employeeNames = new Map();
+    if (employeesResult.Responses && employeesResult.Responses[tableName!]) {
+      employeesResult.Responses[tableName!].forEach((employee) => {
+        const empId = employee.PK.replace("EMP#", "");
+        employeeNames.set(empId, employee.name);
+      });
+    }
+
+    const enrichedAssignments = result.Items.map((assignment) => {
+      const empId = assignment.GSI1SK.replace("EMP#", "");
+      return {
+        ...assignment,
+        employeeName: employeeNames.get(empId) || "Unknown Employee",
+      };
+    });
+
+    return createResponse(200, enrichedAssignments);
   },
 
   "DELETE /assignments": async (event) => {
