@@ -1,5 +1,5 @@
 import { Entity, item, string } from "dynamodb-toolbox";
-import { AppTable } from "./table";
+import { AppTable } from "./table.js";
 
 export const AssignmentEntity = new Entity({
   name: "Assignment",

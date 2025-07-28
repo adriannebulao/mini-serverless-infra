@@ -1,10 +1,10 @@
 import { Entity, item, list, string } from "dynamodb-toolbox";
-import { AppTable } from "./table";
+import { AppTable } from "./table.js";
 
 export const EmployeeEntity = new Entity({
   name: "Employee",
   table: AppTable,
-  computeKey: (id) => ({
+  computeKey: ({ id }) => ({
     PK: `EMP#${id}`,
     SK: "PROFILE",
   }),
