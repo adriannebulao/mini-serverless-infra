@@ -1,212 +1,163 @@
 import { APIGatewayProxyHandler } from "aws-lambda";
 import { StatusCodes } from "http-status-codes";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { v4 as uuidv4 } from "uuid";
-import {
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  DeleteCommand,
-  UpdateCommand,
-  QueryCommand,
-  BatchWriteCommand,
-} from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
 import { createResponse } from "../utils/response.js";
+import { EmployeeEntity } from "../models/employee.js";
+import {
+  BatchDeleteRequest,
+  BatchWriteCommand,
+  DeleteItemCommand,
+  executeBatchWrite,
+  GetItemCommand,
+  PutItemCommand,
+  QueryCommand,
+  UpdateItemCommand,
+  UpdateItemInput,
+} from "dynamodb-toolbox";
+import { AppTable } from "../models/table.js";
+import { AssignmentEntity } from "../models/assignment.js";
 config();
 
-const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 type RouteHandler = (event: any, id?: string) => Promise<any>;
-const tableName = process.env.TABLE_NAME;
 
 const routeHandlers: Record<string, RouteHandler> = {
   "GET /employees": async () => {
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :gsiPk",
-        ExpressionAttributeValues: {
-          ":gsiPk": "EMPLOYEE",
-        },
+    const { Items } = await AppTable.build(QueryCommand)
+      .entities(EmployeeEntity)
+      .query({
+        partition: "EMPLOYEE",
+        index: "GSI1",
       })
-    );
+      .send();
 
-    return createResponse(200, result.Items ?? []);
+    return createResponse(200, Items ?? []);
   },
 
   "GET /employees/:id": async (_event, id) => {
-    const getResult = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: {
-          PK: `EMP#${id}`,
-          SK: "PROFILE",
-        },
-      })
-    );
-
-    if (!getResult.Item) {
-      return createResponse(
-        404,
-        JSON.stringify({ message: "Employee not found" })
-      );
+    if (!id) {
+      return createResponse(400, { message: "Missing employee id" });
     }
 
-    return createResponse(200, JSON.stringify(getResult.Item));
+    const { Item } = await EmployeeEntity.build(GetItemCommand)
+      .key({ id })
+      .options({ consistent: true })
+      .send();
+
+    if (!Item) {
+      return createResponse(404, { message: "Employee not found" });
+    }
+
+    return createResponse(200, Item);
   },
 
   "POST /employees": async (event) => {
     if (!event.body) {
-      return createResponse(
-        400,
-        JSON.stringify({ message: "Missing request body" })
-      );
+      return createResponse(400, { message: "Missing request body" });
     }
 
-    const body = event.body ? JSON.parse(event.body) : null;
+    const body = JSON.parse(event.body);
 
     if (!body.name || !body.email || !body.start_date) {
-      return createResponse(
-        400,
-        JSON.stringify({
-          message: "Missing required fields: name, email, start_date",
-        })
-      );
+      return createResponse(400, {
+        message: "Missing required fields: name, email, start_date",
+      });
     }
-    const timestamp = new Date().toISOString();
+
     const empId = uuidv4();
 
-    const newEmp = {
-      PK: `EMP#${empId}`,
-      SK: "PROFILE",
+    const newEmployee = {
+      id: empId,
+      GSI1PK: "EMPLOYEE",
+      GSI1SK: body.name,
       name: body.name,
       email: body.email,
       start_date: body.start_date,
-      end_date: body.end_date ?? null,
-      positions: body.positions || [],
-      tech_stack: body.tech_stack || [],
-      created_at: timestamp,
-      updated_at: timestamp,
-      GSI1PK: "EMPLOYEE",
-      GSI1SK: body.name,
+      end_date: body.end_date,
+      positions: body.positions,
+      tech_stack: body.tech_stack,
     };
 
-    await client.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: newEmp,
-      })
-    );
+    await EmployeeEntity.build(PutItemCommand).item(newEmployee).send();
 
-    return createResponse(
-      201,
-      JSON.stringify({ message: "Employee created", employee: newEmp })
-    );
+    return createResponse(201, {
+      message: "Employee created",
+      employee: newEmployee,
+    });
   },
 
   "PUT /employees/:id": async (event, id) => {
+    if (!id) {
+      return createResponse(400, { message: "Missing employee id" });
+    }
+
     if (!event.body) {
-      return createResponse(
-        400,
-        JSON.stringify({ message: "Missing request body" })
-      );
+      return createResponse(400, { message: "Missing request body" });
     }
 
-    const body = event.body ? JSON.parse(event.body) : null;
-    const timestamp = new Date().toISOString();
-    const key = { PK: `EMP#${id}`, SK: "PROFILE" };
+    const body = JSON.parse(event.body);
 
-    const existing = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: key,
-      })
-    );
+    const updates: UpdateItemInput<typeof EmployeeEntity> = {
+      id: id,
+    };
 
-    if (!existing.Item) {
-      return createResponse(
-        404,
-        JSON.stringify({ message: "Employee not found" })
-      );
+    if (body.name) {
+      updates.name = body.name;
+      updates.GSI1SK = body.name;
     }
+    if (body.email) updates.email = body.email;
+    if (body.start_date) updates.start_date = body.start_date;
+    if (body.end_date !== undefined) updates.end_date = body.end_date;
+    if (body.positions) updates.positions = body.positions;
+    if (body.tech_stack) updates.tech_stack = body.tech_stack;
 
-    await client.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: key,
-        UpdateExpression: `
-        SET #name = :name,
-            email = :email,
-            start_date = :start_date,
-            end_date = :end_date,
-            positions = :positions,
-            tech_stack = :tech_stack,
-            updated_at = :updated_at,
-            GSI1SK = :gsi1sk
-      `,
-        ExpressionAttributeNames: {
-          "#name": "name",
-        },
-        ExpressionAttributeValues: {
-          ":name": body.name,
-          ":email": body.email,
-          ":start_date": body.start_date,
-          ":end_date": body.end_date,
-          ":positions": body.positions,
-          ":tech_stack": body.tech_stack,
-          ":updated_at": timestamp,
-          ":gsi1sk": body.name,
-        },
-      })
-    );
+    const { Attributes } = await EmployeeEntity.build(UpdateItemCommand)
+      .item(updates)
+      .options({ returnValues: "ALL_NEW" })
+      .send();
 
-    return createResponse(200, JSON.stringify({ message: "Updated employee" }));
+    if (!Attributes) {
+      return createResponse(404, { message: "Employee not found" });
+    }
+    return createResponse(200, {
+      message: "Updated employee",
+      employee: Attributes,
+    });
   },
 
   "DELETE /employees/:id": async (_event, id) => {
-    const assignments = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": `EMP#${id}`,
-          ":sk": "PROJ#",
-        },
-      })
-    );
-
-    const deletes =
-      assignments.Items?.map((item) => ({
-        DeleteRequest: {
-          Key: { PK: item.PK, SK: item.SK },
-        },
-      })) || [];
-
-    if (deletes.length > 0) {
-      await client.send(
-        new BatchWriteCommand({
-          RequestItems: {
-            [tableName!]: deletes,
-          },
-        })
-      );
+    if (!id) {
+      return createResponse(404, { message: "Missing employee id" });
     }
 
-    await client.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: {
-          PK: `EMP#${id}`,
-          SK: "PROFILE",
-        },
+    const { Items: assignments } = await AppTable.build(QueryCommand)
+      .entities(AssignmentEntity)
+      .query({
+        partition: `EMP#${id}`,
+        range: { attr: "SK", beginsWith: "PROJ#" },
       })
-    );
+      .send();
 
-    return createResponse(
-      200,
-      JSON.stringify({ message: "Deleted employee and related assignments" })
-    );
+    if (assignments?.length) {
+      const deleteRequests = assignments.map((assignment) =>
+        AssignmentEntity.build(BatchDeleteRequest).key({
+          employeeId: id,
+          projectId: assignment.projectId,
+        })
+      );
+
+      const batchCmd = AppTable.build(BatchWriteCommand).requests(
+        ...deleteRequests
+      );
+
+      await executeBatchWrite(batchCmd);
+    }
+
+    await EmployeeEntity.build(DeleteItemCommand).key({ id }).send();
+
+    return createResponse(200, {
+      message: "Deleted employee and their assignments",
+    });
   },
 };
 
