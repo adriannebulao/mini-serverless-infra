@@ -1,21 +1,20 @@
 import { APIGatewayProxyHandler } from "aws-lambda";
 import { StatusCodes } from "http-status-codes";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import {
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  DeleteCommand,
-  QueryCommand,
-  BatchGetCommand,
-} from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
 import { createResponse } from "../utils/response.js";
+import { AssignmentEntity } from "../models/assignment.js";
+import { EmployeeEntity } from "../models/employee.js";
+import { ProjectEntity } from "../models/project.js";
+import {
+  DeleteItemCommand,
+  GetItemCommand,
+  PutItemCommand,
+  QueryCommand,
+} from "dynamodb-toolbox";
+import { AppTable } from "../models/table.js";
 config();
 
-const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 type RouteHandler = (event: any, id?: string) => Promise<any>;
-const tableName = process.env.TABLE_NAME;
 
 const routeHandlers: Record<string, RouteHandler> = {
   "POST /assignments": async (event) => {
@@ -31,49 +30,34 @@ const routeHandlers: Record<string, RouteHandler> = {
       });
     }
 
-    const employee = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: {
-          PK: `EMP#${employeeId}`,
-          SK: "PROFILE",
-        },
-      })
-    );
+    const { Item: employee } = await EmployeeEntity.build(GetItemCommand)
+      .key({ id: employeeId })
+      .send();
 
-    if (!employee.Item) {
+    if (!employee) {
       return createResponse(404, {
         message: `Employee ${employeeId} not found`,
       });
     }
 
-    const project = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: {
-          PK: `PROJ#${projectId}`,
-          SK: "DETAILS",
-        },
-      })
-    );
+    const { Item: project } = await ProjectEntity.build(GetItemCommand)
+      .key({ id: projectId })
+      .send();
 
-    if (!project.Item) {
+    if (!project) {
       return createResponse(404, { message: `Project ${projectId} not found` });
     }
 
-    await client.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: {
-          PK: `EMP#${employeeId}`,
-          SK: `PROJ#${projectId}`,
-          GSI1PK: `PROJ#${projectId}`,
-          GSI1SK: `EMP#${employeeId}`,
-          role,
-          assignedAt: new Date().toISOString(),
-        },
-      })
-    );
+    const newAssignment = {
+      employeeId,
+      projectId,
+      GSI1PK: `PROJ#${projectId}`,
+      GSI1SK: `EMP#${employeeId}`,
+      role,
+      assigned_at: new Date().toISOString(),
+    };
+
+    await AssignmentEntity.build(PutItemCommand).item(newAssignment).send();
 
     return createResponse(201, {
       message: "Employee assigned to project",
@@ -81,107 +65,89 @@ const routeHandlers: Record<string, RouteHandler> = {
   },
 
   "GET /employees/:id/projects": async (_event, id) => {
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": `EMP#${id}`,
-          ":sk": "PROJ#",
-        },
-      })
-    );
+    if (!id) {
+      return createResponse(400, { message: "Missing employee id" });
+    }
 
-    if (!result.Items || result.Items.length === 0) {
+    const { Items: assignments } = await AppTable.build(QueryCommand)
+      .entities(AssignmentEntity)
+      .query({
+        partition: `EMP#${id}`,
+        range: { attr: "SK", beginsWith: "PROJ#" },
+      })
+      .send();
+
+    if (!assignments || assignments.length === 0) {
       return createResponse(200, []);
     }
 
-    const projectIds = result.Items.map((item) => item.SK.replace("PROJ#", ""));
-    const projectKeys = projectIds.map((projId) => ({
-      PK: `PROJ#${projId}`,
-      SK: "DETAILS",
-    }));
-
-    const projectsResult = await client.send(
-      new BatchGetCommand({
-        RequestItems: {
-          [tableName!]: {
-            Keys: projectKeys,
-          },
-        },
-      })
+    const projectPromises = assignments.map((assignment) =>
+      ProjectEntity.build(GetItemCommand)
+        .key({ id: assignment.projectId })
+        .send()
     );
 
-    const projectNames = new Map();
-    if (projectsResult.Responses && projectsResult.Responses[tableName!]) {
-      projectsResult.Responses[tableName!].forEach((project) => {
-        const projId = project.PK.replace("PROJ#", "");
-        projectNames.set(projId, project.name);
-      });
-    }
+    const projectResults = await Promise.all(projectPromises);
+    const projects = projectResults
+      .map((result) => result.Item)
+      .filter(Boolean);
 
-    const enrichedAssignments = result.Items.map((assignment) => {
-      const projId = assignment.SK.replace("PROJ#", "");
-      return {
-        ...assignment,
-        projectName: projectNames.get(projId) || "Unknown Project",
-      };
+    const projectNames = new Map();
+    projects.forEach((project) => {
+      if (project) {
+        projectNames.set(project.id, project.name);
+      }
     });
+
+    const enrichedAssignments = assignments.map((assignment) => ({
+      ...assignment,
+      projectName: projectNames.get(assignment.projectId) || "Unknown Project",
+    }));
 
     return createResponse(200, enrichedAssignments);
   },
 
   "GET /projects/:id/employees": async (_event, id) => {
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        IndexName: "GSI1",
-        KeyConditionExpression:
-          "GSI1PK = :gsi1pk AND begins_with(GSI1SK, :gsi1sk)",
-        ExpressionAttributeValues: {
-          ":gsi1pk": `PROJ#${id}`,
-          ":gsi1sk": "EMP#",
-        },
-      })
-    );
+    if (!id) {
+      return createResponse(400, { message: "Missing project id" });
+    }
 
-    if (!result.Items || result.Items.length === 0) {
+    const { Items: assignments } = await AppTable.build(QueryCommand)
+      .entities(AssignmentEntity)
+      .query({
+        partition: `PROJ#${id}`,
+        range: { attr: "GSI1SK", beginsWith: "EMP#" },
+        index: "GSI1",
+      })
+      .send();
+
+    if (!assignments || assignments.length === 0) {
       return createResponse(200, []);
     }
 
-    const employeeIds = result.Items.map((item) =>
-      item.GSI1SK.replace("EMP#", "")
+    const employeePromises = assignments.map((assignment) =>
+      EmployeeEntity.build(GetItemCommand)
+        .key({ id: assignment.employeeId })
+        .send()
     );
-    const employeeKeys = employeeIds.map((empId) => ({
-      PK: `EMP#${empId}`,
-      SK: "PROFILE",
-    }));
 
-    const employeesResult = await client.send(
-      new BatchGetCommand({
-        RequestItems: {
-          [tableName!]: {
-            Keys: employeeKeys,
-          },
-        },
-      })
-    );
+    const employeeResults = await Promise.all(employeePromises);
+    const employees = employeeResults
+      .map((result) => result.Item)
+      .filter(Boolean);
 
     const employeeNames = new Map();
-    if (employeesResult.Responses && employeesResult.Responses[tableName!]) {
-      employeesResult.Responses[tableName!].forEach((employee) => {
-        const empId = employee.PK.replace("EMP#", "");
-        employeeNames.set(empId, employee.name);
-      });
-    }
-
-    const enrichedAssignments = result.Items.map((assignment) => {
-      const empId = assignment.GSI1SK.replace("EMP#", "");
-      return {
-        ...assignment,
-        employeeName: employeeNames.get(empId) || "Unknown Employee",
-      };
+    employees.forEach((employee) => {
+      if (employee) {
+        employeeNames.set(employee.id, employee.name);
+      }
     });
+
+    const enrichedAssignments = assignments.map((assignment) => ({
+      ...assignment,
+      employeeName:
+        employeeNames.get(assignment.employeeId) || "Unknown Employee",
+    }));
 
     return createResponse(200, enrichedAssignments);
   },
@@ -199,15 +165,9 @@ const routeHandlers: Record<string, RouteHandler> = {
       });
     }
 
-    await client.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: {
-          PK: `EMP#${employeeId}`,
-          SK: `PROJ#${projectId}`,
-        },
-      })
-    );
+    await AssignmentEntity.build(DeleteItemCommand)
+      .key({ employeeId, projectId })
+      .send();
 
     return createResponse(200, { message: "Unassigned employee from project" });
   },
