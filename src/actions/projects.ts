@@ -1,56 +1,54 @@
 import { APIGatewayProxyHandler } from "aws-lambda";
 import { StatusCodes } from "http-status-codes";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { v4 as uuidv4 } from "uuid";
-import {
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  DeleteCommand,
-  UpdateCommand,
-  QueryCommand,
-  BatchWriteCommand,
-} from "@aws-sdk/lib-dynamodb";
 import { config } from "dotenv";
 import { createResponse } from "../utils/response.js";
+import { ProjectEntity } from "../models/project.js";
+import {
+  BatchDeleteRequest,
+  BatchWriteCommand,
+  DeleteItemCommand,
+  executeBatchWrite,
+  GetItemCommand,
+  PutItemCommand,
+  QueryCommand,
+  UpdateItemCommand,
+  UpdateItemInput,
+} from "dynamodb-toolbox";
+import { AppTable } from "../models/table.js";
+import { AssignmentEntity } from "../models/assignment.js";
 config();
 
-const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 type RouteHandler = (event: any, id?: string) => Promise<any>;
-const tableName = process.env.TABLE_NAME;
 
 const routeHandlers: Record<string, RouteHandler> = {
   "GET /projects": async () => {
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :gsiPk",
-        ExpressionAttributeValues: {
-          ":gsiPk": "PROJECT",
-        },
+    const { Items } = await AppTable.build(QueryCommand)
+      .entities(ProjectEntity)
+      .query({
+        partition: "PROJECT",
+        index: "GSI1",
       })
-    );
+      .send();
 
-    return createResponse(200, result.Items ?? []);
+    return createResponse(200, Items ?? []);
   },
 
   "GET /projects/:id": async (_event, id) => {
-    const getResult = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: {
-          PK: `PROJ#${id}`,
-          SK: "DETAILS",
-        },
-      })
-    );
+    if (!id) {
+      return createResponse(400, { message: "Missing project id" });
+    }
 
-    if (!getResult.Item) {
+    const { Item } = await ProjectEntity.build(GetItemCommand)
+      .key({ id })
+      .options({ consistent: true })
+      .send();
+
+    if (!Item) {
       return createResponse(404, { message: "Project not found" });
     }
 
-    return createResponse(200, getResult.Item);
+    return createResponse(200, Item);
   },
 
   "POST /projects": async (event) => {
@@ -58,133 +56,104 @@ const routeHandlers: Record<string, RouteHandler> = {
       return createResponse(400, { message: "Missing request body" });
     }
 
-    const body = event.body ? JSON.parse(event.body) : null;
+    const body = JSON.parse(event.body);
 
     if (!body.name || !body.start_date) {
       return createResponse(400, {
         message: "Missing required fields: name, start_date",
       });
     }
-    const timestamp = new Date().toISOString();
+
     const projId = uuidv4();
 
-    const newProj = {
-      PK: `PROJ#${projId}`,
-      SK: "DETAILS",
-      name: body.name,
-      description: body.description ?? null,
-      start_date: body.start_date,
-      end_date: body.end_date ?? null,
-      tech_stack: body.tech_stack || [],
-      created_at: timestamp,
-      updated_at: timestamp,
+    const newProject = {
+      id: projId,
       GSI1PK: "PROJECT",
       GSI1SK: body.name,
+      name: body.name,
+      description: body.description,
+      start_date: body.start_date,
+      end_date: body.end_date,
+      tech_stack: body.tech_stack,
     };
 
-    await client.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: newProj,
-      })
-    );
+    await ProjectEntity.build(PutItemCommand).item(newProject).send();
 
     return createResponse(201, {
       message: "Project created",
-      project: newProj,
+      project: newProject,
     });
   },
 
   "PUT /projects/:id": async (event, id) => {
+    if (!id) {
+      return createResponse(400, { message: "Missing project id" });
+    }
+
     if (!event.body) {
       return createResponse(400, { message: "Missing request body" });
     }
 
-    const body = event.body ? JSON.parse(event.body) : null;
-    const timestamp = new Date().toISOString();
-    const key = { PK: `PROJ#${id}`, SK: "DETAILS" };
+    const body = JSON.parse(event.body);
 
-    const existing = await client.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: key,
-      })
-    );
+    const updates: UpdateItemInput<typeof ProjectEntity> = {
+      id: id,
+    };
 
-    if (!existing.Item) {
+    if (body.name) {
+      updates.name = body.name;
+      updates.GSI1SK = body.name;
+    }
+    if (body.description !== undefined) updates.description = body.description;
+    if (body.start_date) updates.start_date = body.start_date;
+    if (body.end_date !== undefined) updates.end_date = body.end_date;
+    if (body.tech_stack) updates.tech_stack = body.tech_stack;
+
+    const { Attributes } = await ProjectEntity.build(UpdateItemCommand)
+      .item(updates)
+      .options({ returnValues: "ALL_NEW" })
+      .send();
+
+    if (!Attributes) {
       return createResponse(404, { message: "Project not found" });
     }
 
-    await client.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: key,
-        UpdateExpression: `
-        SET #name = :name,
-            description = :description,
-            start_date = :start_date,
-            end_date = :end_date,
-            tech_stack = :tech_stack,
-            updated_at = :updated_at,
-            GSI1SK = :gsi1sk
-      `,
-        ExpressionAttributeNames: {
-          "#name": "name",
-        },
-        ExpressionAttributeValues: {
-          ":name": body.name,
-          ":description": body.description,
-          ":start_date": body.start_date,
-          ":end_date": body.end_date,
-          ":tech_stack": body.tech_stack,
-          ":updated_at": timestamp,
-          ":gsi1sk": body.name,
-        },
-      })
-    );
-
-    return createResponse(200, { message: "Updated project" });
+    return createResponse(200, {
+      message: "Project updated successfully",
+      project: Attributes,
+    });
   },
 
   "DELETE /projects/:id": async (_event, id) => {
-    const assignments = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk AND begins_with(GSI1SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": `PROJ#${id}`,
-          ":sk": "EMP#",
-        },
-      })
-    );
-
-    const deletes =
-      assignments.Items?.map((item) => ({
-        DeleteRequest: {
-          Key: { PK: item.PK, SK: item.SK },
-        },
-      })) || [];
-
-    if (deletes.length > 0) {
-      await client.send(
-        new BatchWriteCommand({
-          RequestItems: {
-            [tableName!]: deletes,
-          },
-        })
-      );
+    if (!id) {
+      return createResponse(400, { message: "Missing project id" });
     }
 
-    await client.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: {
-          PK: `PROJ#${id}`,
-          SK: "DETAILS",
-        },
+    const { Items: assignments } = await AppTable.build(QueryCommand)
+      .entities(AssignmentEntity)
+      .query({
+        partition: `PROJ#${id}`,
+        range: { attr: "GSI1SK", beginsWith: "EMP#" },
+        index: "GSI1",
       })
-    );
+      .send();
+
+    if (assignments?.length) {
+      const deleteRequests = assignments.map((assignment) =>
+        AssignmentEntity.build(BatchDeleteRequest).key({
+          employeeId: assignment.employeeId,
+          projectId: id,
+        })
+      );
+
+      const batchCmd = AppTable.build(BatchWriteCommand).requests(
+        ...deleteRequests
+      );
+
+      await executeBatchWrite(batchCmd);
+    }
+
+    await ProjectEntity.build(DeleteItemCommand).key({ id }).send();
 
     return createResponse(200, {
       message: "Deleted project and related assignments",
