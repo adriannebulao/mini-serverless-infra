@@ -18,6 +18,7 @@ This project includes two deployable stacks:
 - **AWS Lambda** - Serverless compute service to handle business logic for employee, project, and assignment operations
 - **AWS API Gateway** - Provides RESTful HTTP endpoints that trigger Lambda functions
 - **AWS DynamoDB** - NoSQL database using a single-table design to effectively store employees, projects, assignments in a scalable way
+- **AWS S3** - Object storage service used for hosting the static React frontend
 
 ## Getting Started
 
@@ -32,6 +33,7 @@ This project includes two deployable stacks:
   - Lambda functions
   - API Gateway
   - DynamoDB tables
+  - S3 buckets
   - IAM roles/policies
 
 ### Setup & Deployment
@@ -39,8 +41,8 @@ This project includes two deployable stacks:
 1. Clone the repository
 
 ```
-git clone https://github.com/adriannebulao/mini-serverless-backend.git
-cd mini-serverless-backend
+git clone https://github.com/adriannebulao/mini-serverless-infra.git
+cd mini-serverless-infra
 ```
 
 2. Install dependencies
@@ -50,6 +52,7 @@ Install both root-level (`/`) and lambda-level (`/src`) dependencies:
 ```
 npm install
 cd src && npm install
+cd ..
 ```
 
 3. Configure environment variables
